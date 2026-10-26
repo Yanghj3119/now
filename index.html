@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>제주 귤 뽑기</title>
+<style>
+  :root {
+    --sky-top: #bfe9f5;
+    --sky-bottom: #eaf8ee;
+    --ground: #7bb661;
+    --ground-dark: #5f9a4a;
+    --ink: #3b2a1a;
+    --card-bg: #fffaf0;
+    --accent: #f28c1b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    color: var(--ink);
+    background: linear-gradient(var(--sky-top), var(--sky-bottom));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+  h1 { margin: 20px 16px 4px; font-size: clamp(1.4rem, 5vw, 2rem); text-align: center; }
+  .sub { margin: 0 16px; font-size: .95rem; opacity: .75; text-align: center; }
+  .counter {
+    margin: 12px 0 0;
+    background: #fff;
+    border: 2px solid var(--accent);
+    border-radius: 999px;
+    padding: 6px 18px;
+    font-weight: 700;
+  }
+  .counter b { color: var(--accent); font-size: 1.3em; }
+
+  .stage {
+    position: relative;
+    width: min(92vw, 460px);
+    margin-top: 8px;
+  }
+  svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
+  #tree { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #tree:focus-visible { outline: 3px dashed var(--accent); outline-offset: 4px; }
+  #tree.shake { animation: shake .4s; transform-origin: 50% 90%; }
+  @keyframes shake {
+    0%,100% { transform: rotate(0); }
+    25% { transform: rotate(-1.6deg); }
+    75% { transform: rotate(1.6deg); }
+  }
+  .hint { text-align: center; margin: 0; font-size: .9rem; opacity: .7; }
+
+  .card {
+    position: fixed;
+    left: 50%; top: 50%;
+    width: min(86vw, 340px);
+    background: var(--card-bg);
+    border: 3px solid var(--accent);
+    border-radius: 18px;
+    padding: 24px 20px 20px;
+    text-align: center;
+    box-shadow: 0 12px 32px rgba(0,0,0,.25);
+    transform: translate(-50%, -50%) scale(.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .35s cubic-bezier(.2,1.4,.4,1), opacity .25s;
+    z-index: 10;
+  }
+  .card.show { transform: translate(-50%, -50%) scale(1); opacity: 1; pointer-events: auto; }
+  .card .emoji { font-size: 2.4rem; }
+  .card .jeju { font-size: 1.6rem; font-weight: 800; margin: 6px 0; color: #c9620a; }
+  .card .mean { font-size: 1rem; margin-bottom: 16px; }
+  .card button {
+    border: 0; border-radius: 999px; background: var(--accent); color: #fff;
+    padding: 10px 24px; font-size: 1rem; font-weight: 700; cursor: pointer;
+    font-family: inherit;
+  }
+  .card button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 5;
+  }
+  .backdrop.show { opacity: 1; pointer-events: auto; }
+  @media (prefers-reduced-motion: reduce) {
+    #tree.shake { animation: none; }
+    .card { transition: opacity .1s; }
+  }
+</style>
+</head>
+<body>
+  <h1>🍊 제주 귤 뽑기 🍊</h1>
+  <p class="sub">귤나무를 눌러 제주어 덕담을 받아 보세요</p>
+  <div class="counter">뽑은 귤 <b id="count">0</b>개</div>
+
+  <div class="stage">
+    <svg id="scene" viewBox="0 0 400 420" role="img" aria-label="귤이 달린 귤나무">
+      <ellipse cx="200" cy="395" rx="190" ry="22" fill="var(--ground)"/>
+      <ellipse cx="200" cy="400" rx="150" ry="14" fill="var(--ground-dark)" opacity=".5"/>
+      <g id="tree" tabindex="0" role="button" aria-label="귤나무 누르기">
+        <rect x="182" y="250" width="36" height="145" rx="10" fill="#8a5a2b"/>
+        <path d="M200 330 L160 285 M200 320 L242 278" stroke="#8a5a2b" stroke-width="12" stroke-linecap="round" fill="none"/>
+        <circle cx="200" cy="170" r="110" fill="#3f9a4a"/>
+        <circle cx="130" cy="210" r="70" fill="#4aaa55"/>
+        <circle cx="272" cy="208" r="72" fill="#4aaa55"/>
+        <circle cx="200" cy="105" r="62" fill="#55b860"/>
+        <g id="fruits"></g>
+      </g>
+      <g id="fallen"></g>
+    </svg>
+  </div>
+  <p class="hint">나무를 누르면 귤이 하나 떨어져요</p>
+
+  <div class="backdrop" id="backdrop"></div>
+  <div class="card" id="card" role="dialog" aria-live="polite" aria-labelledby="jeju">
+    <div class="emoji">🍊</div>
+    <div class="jeju" id="jeju"></div>
+    <div class="mean" id="mean"></div>
+    <button type="button" id="close">고맙수다!</button>
+  </div>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  var MESSAGES = [
+    ["혼저 옵서예", "어서 오세요"],
+    ["고맙수다", "고맙습니다"],
+    ["폭삭 속았수다", "정말 수고 많으셨습니다"],
+    ["놀멍 쉬멍 갑서", "놀며 쉬며 천천히 가세요"],
+    ["하영 먹읍서", "많이 드세요"],
+    ["복 하영 받읍서", "복 많이 받으세요"],
+    ["사랑햄수다", "사랑합니다"],
+    ["펀안헙서", "편안하게 지내세요"],
+    ["몬딱 잘 되쿠다", "모두 잘 될 거예요"],
+    ["아프지 말앙 오래오래 삽서", "아프지 말고 오래오래 사세요"]
+  ];
+  var SPOTS = [
+    [150,120],[215,95],[255,140],[110,185],[175,165],[235,195],
+    [295,200],[140,240],[200,225],[260,250],[95,235],[320,245]
+  ];
+  var GROUND_Y = 385;
+
+  var tree = document.getElementById("tree");
+  var fruits = document.getElementById("fruits");
+  var fallen = document.getElementById("fallen");
+  var card = document.getElementById("card");
+  var backdrop = document.getElementById("backdrop");
+  var countEl = document.getElementById("count");
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var count = 0, lastMsg = -1, busy = false;
+
+  function makeFruit(x, y) {
+    var g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", "translate(" + x + " " + y + ")");
+    var inner = document.createElementNS(NS, "g");
+    inner.innerHTML =
+      '<circle r="15" fill="#f7931e"/>' +
+      '<circle r="15" fill="none" stroke="#d9740a" stroke-width="1.5"/>' +
+      '<ellipse cx="-5" cy="-6" rx="4" ry="2.5" fill="#fff" opacity=".45"/>' +
+      '<path d="M0 -15 q-2 -5 4 -6 q-1 4 -4 6z" fill="#2f7d37"/>';
+    g.appendChild(inner);
+    g._x = x; g._y = y;
+    return g;
+  }
+
+  function fillTree() {
+    fruits.innerHTML = "";
+    SPOTS.forEach(function (p) { fruits.appendChild(makeFruit(p[0], p[1])); });
+  }
+
+  function dropOne() {
+    var list = fruits.children;
+    if (!list.length) fillTree();
+    var fruit = list[Math.floor(Math.random() * list.length)];
+    var x = fruit._x, y = fruit._y;
+    var landX = x + (Math.random() * 40 - 20);
+    fruits.removeChild(fruit);
+    fallen.appendChild(fruit);
+    var dist = GROUND_Y - y - 10;
+    var anim = fruit.animate([
+      { transform: "translate(" + x + "px," + y + "px) rotate(0deg)", opacity: 1 },
+      { transform: "translate(" + landX + "px," + (y + dist) + "px) rotate(200deg)", opacity: 1, offset: .85 },
+      { transform: "translate(" + landX + "px," + (y + dist) + "px) rotate(220deg)", opacity: 0 }
+    ], { duration: reduceMotion ? 1 : 900, easing: "cubic-bezier(.5,0,1,.6)", fill: "forwards" });
+    anim.onfinish = function () { fruit.remove(); };
+    return anim;
+  }
+
+  function pickMessage() {
+    var i;
+    do { i = Math.floor(Math.random() * MESSAGES.length); }
+    while (i === lastMsg && MESSAGES.length > 1);
+    lastMsg = i;
+    return MESSAGES[i];
+  }
+
+  function showCard() {
+    var m = pickMessage();
+    document.getElementById("jeju").textContent = m[0];
+    document.getElementById("mean").textContent = "(" + m[1] + ")";
+    card.classList.add("show");
+    backdrop.classList.add("show");
+    document.getElementById("close").focus();
+  }
+
+  function hideCard() {
+    card.classList.remove("show");
+    backdrop.classList.remove("show");
+    busy = false;
+    tree.focus({ preventScroll: true });
+  }
+
+  function pull() {
+    if (busy) return;
+    busy = true;
+    tree.classList.remove("shake");
+    void tree.getBBox();
+    if (!reduceMotion) tree.classList.add("shake");
+    var anim = dropOne();
+    count++;
+    countEl.textContent = count;
+    anim.addEventListener("finish", showCard);
+  }
+
+  tree.addEventListener("click", pull);
+  tree.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pull(); }
+  });
+  document.getElementById("close").addEventListener("click", hideCard);
+  backdrop.addEventListener("click", hideCard);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && card.classList.contains("show")) hideCard();
+  });
+
+  fillTree();
+})();
+</script>
+</body>
+</html>
